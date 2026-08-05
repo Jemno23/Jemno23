@@ -72,8 +72,8 @@ export const CONFIG = {
    */
   limbs: {
     count: 11,
-    firstNode: 5,            // spine node the first (anterior-most) limb pair sits on
-    lastNode: 15,
+    firstNode: 7,            // spine node the first (anterior-most) limb pair sits on
+    lastNode: 17,           // measured off the reference: limbs span 0.26-0.68 L
 
     /**
      * Phase lag between adjacent limb pairs. This is the whole idea of
@@ -130,10 +130,14 @@ export const CONFIG = {
     featherTransition: 0.22,
 
     /** Thrust coefficient: F = k * area * (r*omega)^2, quadratic drag on a paddle. */
-    thrustGain: 0.022,
+    thrustGain: 0.013,
 
-    /** Limb length as a fraction of L, before the along-body taper. */
-    lengthFrac: 0.135,
+    /**
+     * Limb length as a fraction of L, before the along-body taper. Measured off
+     * the reference: blade plus setal fringe reaches ~0.24 L from the midline,
+     * roughly four times the trunk's half-width.
+     */
+    lengthFrac: 0.175,
   },
 
   /**

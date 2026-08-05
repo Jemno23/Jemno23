@@ -14,6 +14,12 @@ the bend has to physically work.
 
 ![the creature](docs/creature.png)
 
+Proportions are fitted to a reference darkfield photograph by measuring it —
+per-column brightness runs, not by eye. See
+[§5b of the model notes](docs/MODEL.md#5b-measuring-the-reference-instead-of-eyeballing-it).
+
+![anatomy](docs/anatomy.png)
+
 ---
 
 ## Run it
@@ -124,7 +130,7 @@ Full detail, including the several things that turned out to be wrong, is in
 - **Quadratic thrust needs quadratic drag.** A paddle's thrust goes as *f²*;
   against linear drag, so does speed, and a burst became absurd. Adding form
   drag — the correct regime at Re of a few hundred — gives glide 0.05, cruise
-  0.65 and burst 1.92 body lengths/s, which matches published Artemia figures
+  0.61 and burst 1.73 body lengths/s, which matches published Artemia figures
   without having been fitted to them.
 - **Shortening the timestep made the solver worse, not better.** Position-Based
   Dynamics derives velocity as `(p − p_prev)/h`, which amplifies every
@@ -138,6 +144,12 @@ Full detail, including the several things that turned out to be wrong, is in
   and the anatomy are the same thing.
 - **The steering couple was inert** until it was expressed as a fraction of the
   animal's own thrust rather than as an absolute force.
+- **The silhouette was wrong in ways eyeballing could not catch.** Measuring
+  the reference photograph column by column — longest contiguous bright run per
+  column — showed the abdomen was drawn at less than half its true width, the
+  limb field sat 6 % of body length too far forward, and the limb blades were a
+  third too short. Correcting the abdomen then required decoupling mass from
+  cross-sectional area, or the trailing whip would have been lost.
 - **Buoyancy was conceptually wrong.** This is a top-down microscope view;
   gravity points into the screen. It was replaced by an ambient current shared
   by the creature *and* the debris, which is a much stronger cue that they are

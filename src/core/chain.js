@@ -469,10 +469,11 @@ function rotateAbout(p, pivot, a) {
  * because these only need to *look* passive — nothing depends on their physics.
  */
 export class Filament {
-  constructor(count, segLen, lag = 0.35) {
+  constructor(count, segLen, maxKink = 0.35) {
     this.count = count;
     this.segLen = segLen;
-    this.lag = lag;
+    /** Maximum turn between consecutive segments, radians. Prevents buckling. */
+    this.maxKink = maxKink;
     this.pos = Array.from({ length: count }, () => new Vec2());
     this.vel = Array.from({ length: count }, () => new Vec2());
   }
@@ -515,11 +516,29 @@ export class Filament {
       p.addScaled(v, dt);
 
       // Inextensibility, applied to the outboard node only (follow-the-leader).
-      const dx = p.x - prev.x, dy = p.y - prev.y;
+      let dx = p.x - prev.x, dy = p.y - prev.y;
       const d = Math.hypot(dx, dy) || 1e-9;
-      const s = this.segLen / d;
-      p.x = prev.x + dx * s;
-      p.y = prev.y + dy * s;
+      dx /= d; dy /= d;
+
+      // Kink limit. Follow-the-leader constrains length but nothing else, so a
+      // segment can fold back on itself for free — which showed up as one
+      // antenna buckling into a hook while its mirror stayed straight. Limiting
+      // the turn between consecutive segments keeps the filament a filament.
+      if (i > 1) {
+        const px = prev.x - this.pos[i - 2].x, py = prev.y - this.pos[i - 2].y;
+        const pd = Math.hypot(px, py) || 1e-9;
+        const ux = px / pd, uy = py / pd;
+        const cos = clamp(ux * dx + uy * dy, -1, 1);
+        const turn = Math.acos(cos);
+        if (turn > this.maxKink) {
+          const sign = Math.sign(ux * dy - uy * dx) || 1;
+          const a = Math.atan2(uy, ux) + sign * this.maxKink;
+          dx = Math.cos(a); dy = Math.sin(a);
+        }
+      }
+
+      p.x = prev.x + dx * this.segLen;
+      p.y = prev.y + dy * this.segLen;
     }
   }
 }

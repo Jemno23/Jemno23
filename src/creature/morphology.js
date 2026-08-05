@@ -13,11 +13,21 @@ import { clamp, lerp, smoothstep } from '../core/mathx.js';
  * needs a different Morphology and a different renderer; the chain, the
  * metachronal drive and the steering are unchanged.
  *
- * The proportions are measured off the reference darkfield photograph:
- *   head + cephalic lobes  0.00 - 0.17 L
- *   thorax, 11 limb pairs  0.17 - 0.52 L
- *   abdomen (naked)        0.52 - 0.95 L
- *   furca / cercopods      0.95 - 1.00 L
+ * The proportions below are not eyeballed. The reference darkfield photograph
+ * was measured column by column — for each x, the longest contiguous run of
+ * pixels above a brightness threshold — which separates the dense trunk from
+ * the translucent limbs and gives a real half-width profile to fit:
+ *
+ *   head + cephalic lobes  0.00 - 0.22 L
+ *   thorax, 11 limb pairs  0.26 - 0.68 L
+ *   abdomen (naked)        0.68 - 0.97 L
+ *   furca / cercopods      0.97 - 1.00 L
+ *
+ * That exercise corrected two errors that had been invisible by eye. The
+ * abdomen was drawn at roughly half its true width — the real one is a
+ * substantial, almost parallel-sided tube holding ~0.030 L half-width from
+ * s = 0.75 to s = 0.87, not the thread it had been. And the limb field sat
+ * about 6 % of body length too far forward.
  */
 
 /**
@@ -27,20 +37,22 @@ import { clamp, lerp, smoothstep } from '../core/mathx.js';
  * corners — a corner in the outline is read instantly as "polygon".
  */
 const WIDTH_POINTS = [
-  [0.000, 0.011],   // rostrum — blunt, not a needle
-  [0.025, 0.038],
-  [0.060, 0.052],   // widest part of the cephalic shield
-  [0.115, 0.048],
-  [0.165, 0.041],   // neck
-  [0.235, 0.048],   // thoracic shoulder
-  [0.370, 0.045],
-  [0.480, 0.037],
-  [0.560, 0.027],   // thorax / abdomen junction
-  [0.680, 0.020],
-  [0.820, 0.014],
-  [0.930, 0.010],
-  [0.975, 0.014],   // slight flare before the furca
-  [1.000, 0.006],
+  [0.000, 0.008],   // rostrum — blunt, not a needle
+  [0.030, 0.035],
+  [0.070, 0.048],   // cephalic shield
+  [0.130, 0.050],
+  [0.200, 0.040],   // neck
+  [0.260, 0.045],   // thoracic shoulder — first limb pair
+  [0.400, 0.053],
+  [0.500, 0.055],   // widest point of the thorax
+  [0.600, 0.053],
+  [0.685, 0.040],   // thorax / abdomen junction — last limb pair
+  [0.750, 0.033],
+  [0.850, 0.030],   // the abdomen stays surprisingly parallel-sided
+  [0.900, 0.024],
+  [0.945, 0.018],
+  [0.975, 0.013],
+  [1.000, 0.007],
 ];
 
 export class Morphology {
@@ -61,9 +73,9 @@ export class Morphology {
 
     // Landmarks, in node indices.
     this.headNode = 0;
-    this.thoraxStart = 5;
-    this.thoraxEnd = 15;
-    this.abdomenStart = 16;
+    this.thoraxStart = 7;
+    this.thoraxEnd = 17;
+    this.abdomenStart = 18;
     this.furcaNode = nodeCount - 1;
 
     /**
@@ -73,8 +85,11 @@ export class Morphology {
      */
     this.lobe = {
       node: 3,
-      length: bodyLength * 0.150,
-      width: bodyLength * 0.098,
+      // Measured: the lobe pair reaches ~0.19 L either side of the midline,
+      // roughly three and a half times the width of the trunk behind it.
+      length: bodyLength * 0.200,
+      width: bodyLength * 0.160,
+      offset: 0.60,      // lateral placement of the lobe centre, in widths
       angle: 0.34,       // rad, splay from the body axis
     };
 
@@ -88,9 +103,10 @@ export class Morphology {
 
     this.antenna = {
       node: 1,
-      segments: 11,
-      segLen: bodyLength * 0.017,
+      segments: 8,
+      segLen: bodyLength * 0.017,   // ~0.13 L overall, as measured
       splay: 0.95,       // rad from the forward axis
+      maxKink: 0.20,     // rad; keeps the filament from folding on itself
     };
 
     this.furca = {
@@ -101,7 +117,8 @@ export class Morphology {
     };
 
     /** The gut: the warm ochre stripe running the length of the animal. */
-    this.gut = { from: 0.050, to: 0.950, halfWidth: bodyLength * 0.0035 };
+    // Measured off the reference by colour: a steady ~0.007 L half-width.
+    this.gut = { from: 0.045, to: 0.955, halfWidth: bodyLength * 0.0070 };
   }
 
   /** Eased interpolation through the measured half-width table. */
@@ -148,10 +165,27 @@ export class Morphology {
   massProfile(massHead, massTail) {
     const m = new Float32Array(this.n);
     for (let i = 0; i < this.n; i++) {
-      // Follow the width profile: mass tracks cross-sectional area.
-      const w = this.halfWidth[i] / (this.L * 0.048);
-      m[i] = lerp(massTail, massHead, clamp(w * w, 0, 1));
+      // Cross-sectional area, times a density that falls off posteriorly.
+      const w = this.halfWidth[i] / (this.L * 0.055);
+      m[i] = lerp(massTail, massHead, clamp(w * w * this.densityAt(this.s[i]), 0, 1));
     }
     return m;
+  }
+
+  /**
+   * Relative density along the body, 0..1.
+   *
+   * Mass cannot simply track cross-sectional area. Measuring the reference
+   * photograph showed the abdomen is about twice as wide as it had been drawn,
+   * and taking mass from width alone would have doubled its weight and killed
+   * the trailing whip — which is the most recognisable thing about how Artemia
+   * moves. It would also be wrong: the thorax is packed with muscle, gut and
+   * gonad, whereas the abdomen is a thin-walled tube that is mostly water.
+   *
+   * Separating the two lets the silhouette be corrected against the photograph
+   * without the dynamics silently changing underneath it.
+   */
+  densityAt(s) {
+    return lerp(1.0, 0.34, smoothstep(0.60, 0.88, s));
   }
 }

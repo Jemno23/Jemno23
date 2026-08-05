@@ -59,7 +59,8 @@ export class SeaMonkey {
     // Passive appendages. They have no say in where the creature goes; they only
     // report on where it has been, which is precisely their value.
     const a = this.morph.antenna;
-    this.antennae = [new Filament(a.segments, a.segLen), new Filament(a.segments, a.segLen)];
+    this.antennae = [new Filament(a.segments, a.segLen, a.maxKink),
+                     new Filament(a.segments, a.segLen, a.maxKink)];
 
     this.age = 0;
     this.speed = 0;
@@ -157,7 +158,7 @@ export class SeaMonkey {
       // sweeps it back when the animal accelerates, which is the tell that the
       // antennae are being dragged through water rather than drawn on.
       const bias = fwd.clone().rotate(sign * a.splay);
-      this.antennae[i].step(base, bias, dt, 24, 10, sign * 0.03);
+      this.antennae[i].step(base, bias, dt, 30, 13, 0);
     }
   }
 

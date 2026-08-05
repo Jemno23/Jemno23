@@ -162,9 +162,9 @@ Sweeping beat frequency and integrating over many cycles:
 
 | | mean total thrust | peak from one limb | ripple in the sum |
 |---|---|---|---|
-| glide, 2.6 Hz | 2 299 | 1 894 | 19 % |
-| cruise, 5.4 Hz | 36 001 | 29 648 | 19 % |
-| burst, 9.0 Hz | 156 244 | 128 658 | 19 % |
+| glide, 2.6 Hz | 2 283 | 1 881 | 19 % |
+| cruise, 5.4 Hz | 35 747 | 29 439 | 19 % |
+| burst, 9.0 Hz | 155 143 | 127 752 | 19 % |
 
 **The hypothesis holds, and more strongly than expected.** A single limb's
 thrust is fully intermittent, and at its peak it delivers ~82 % of the whole
@@ -209,11 +209,11 @@ gaits:
 
 | arousal | gait | speed | align |
 |---|---|---|---|
-| 0.02 | glide | 0.05 BL/s | 0.45 |
-| 0.25 | slow swim | 0.18 BL/s | 0.96 |
-| 0.50 | cruise | 0.65 BL/s | 0.97 |
-| 0.75 | fast | 1.24 BL/s | 0.97 |
-| 1.00 | escape burst | 1.92 BL/s | 0.96 |
+| 0.02 | glide | 0.05 BL/s | 0.58 |
+| 0.25 | slow swim | 0.17 BL/s | 0.93 |
+| 0.50 | cruise | 0.61 BL/s | 0.93 |
+| 0.75 | fast | 1.17 BL/s | 0.94 |
+| 1.00 | escape burst | 1.73 BL/s | 0.93 |
 
 Published Artemia cruising speeds are around 1 BL/s with bursts several times
 that, so this is in the right range without having been fitted to it. The low
@@ -277,8 +277,8 @@ from a wall almost continuously. In open water:
 
 | condition | mean bend | max bend |
 |---|---|---|
-| all systems on | 8.2° | 28° |
-| steering off | 0.4° | 1° |
+| all systems on | 9.0° | 33° |
+| steering off | 0.5° | 1° |
 
 Essentially zero with steering off means thrust bowing is negligible — the thoracic
 stiffness profile is doing its job. The lesson was about the harness, not the
@@ -309,7 +309,7 @@ the reverse looks broken.
 Arousal drives beat frequency, stroke amplitude and turn willingness together,
 so a low-arousal animal does not merely swim slowly — it idles.
 
-Measured startle response: 211 → 586 → 179 px/s (baseline, peak, settled).
+Measured startle response: 213 → 537 → 164 px/s (baseline, peak, settled).
 
 ---
 
@@ -340,8 +340,54 @@ directly as a velocity.
 point: when the debris near the animal drifts the way the animal does, the eye
 reads "these are in the same fluid", which no amount of independent per-object
 noise can fake. An idling creature is now carried ~360 px in 10 s and slowly
-reoriented by the shear across its own length. Phototaxis measures 223 px mean
-distance to the light with it on, against 605 px with it off.
+reoriented by the shear across its own length. Phototaxis measures 195 px mean
+distance to the light with it on, against 587 px with it off.
+
+---
+
+## 5b. Measuring the reference instead of eyeballing it
+
+The proportions were originally fitted by eye against the reference
+photograph, and were wrong in ways that were invisible until measured. So the
+photograph was measured directly: for each image column, the longest
+contiguous run of pixels above a brightness threshold. A low threshold gives
+the animal's full lateral extent including the translucent limbs; a high one
+isolates the dense trunk. The gut was found separately by colour, selecting
+pixels whose red channel exceeds their blue.
+
+That produced a real half-width profile to fit, and corrected four things:
+
+| | eyeballed | measured | |
+|---|---|---|---|
+| abdomen half-width at s = 0.85 | 0.014 L | **0.030 L** | more than twice as wide |
+| limb field | 0.19 – 0.56 L | **0.26 – 0.68 L** | sat too far forward |
+| limb reach from midline | ~0.17 L | **~0.24 L** | blades too short |
+| cephalic lobe half-extent | ~0.12 L | **~0.19 L** | lobes too small |
+
+The abdomen was the significant one. It is not a thread — it is a
+substantial, almost parallel-sided tube holding ~0.030 L half-width from
+s = 0.75 to s = 0.87 before tapering to the furca. Drawn at half that width,
+the animal reads as a tadpole.
+
+Correcting it exposed a coupling worth noting. Mass had been derived from
+cross-sectional area, so doubling the abdomen's width would have roughly
+doubled its weight and killed the trailing whip — the most recognisable thing
+about how Artemia moves. It would also have been wrong: the thorax is packed
+with muscle, gut and gonad, while the abdomen is a thin-walled tube that is
+mostly water. Adding an explicit density profile (`Morphology.densityAt`)
+separates the two, so the silhouette can be fitted to a photograph without the
+dynamics silently changing underneath it. Measured gaits before and after the
+correction differ by under 10 %.
+
+Two smaller fixes came out of the same pass. The body outline is now
+resampled from the spine with Catmull-Rom at four times the physics
+resolution, with width evaluated continuously — 28 nodes is ample for the
+dynamics but the head occupies only six of them, so the rounded cephalic
+shield came out as a visible kink. Adding nodes would have been the wrong fix:
+it is a drawing problem, and it would have changed the dynamics. And the
+antenna filaments gained a kink limit, because follow-the-leader constrains
+length but nothing stops a segment folding back on itself, which showed up as
+one antenna buckling into a hook while its mirror stayed straight.
 
 ---
 

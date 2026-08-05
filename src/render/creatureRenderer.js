@@ -38,6 +38,7 @@ export class CreatureRenderer {
     this._drawLimbs(p, m);
     this._drawBody(p, chain, morph);
     this._drawSegments(p, m);
+    this._drawGranules(p, m);
     this._drawGut(p, chain, morph);
     this._drawAntennae(p, m);
     this._drawFurca(p, m);
@@ -51,15 +52,40 @@ export class CreatureRenderer {
   // Trunk
   // ---------------------------------------------------------------------
 
-  /** Offset the spine by ±halfWidth along its local normal to get the silhouette. */
+  /**
+   * Offset the spine by ±halfWidth along its local normal to get the silhouette.
+   *
+   * The spine is resampled at SUBDIV times the physics resolution first, with
+   * the width evaluated continuously from the measured profile rather than at
+   * the nodes. Twenty-eight nodes is plenty for the dynamics but far too coarse
+   * for the shape: the head occupies six of them, so the rounded cephalic
+   * shield came out as a visible kink at the rostrum. Resampling is purely a
+   * rendering concern and belongs here — it would be wrong to add nodes to the
+   * simulation to fix a drawing problem, and it would change the dynamics.
+   */
   _outline(chain, morph) {
+    const SUBDIV = 4;
     const left = [], right = [];
-    for (let i = 0; i < chain.count; i++) {
-      const n = chain.normal(i, this._n);
-      const w = morph.halfWidth[i];
-      const q = chain.pos[i];
-      left.push(new Vec2(q.x + n.x * w, q.y + n.y * w));
-      right.push(new Vec2(q.x - n.x * w, q.y - n.y * w));
+    const n = chain.count;
+    const p0 = new Vec2(), p1 = new Vec2();
+
+    for (let i = 0; i < n - 1; i++) {
+      const steps = i === n - 2 ? SUBDIV : SUBDIV - 1;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / SUBDIV;
+        catmullRom(chain.pos, i, t, p0);
+        // Tangent by finite difference along the same spline.
+        catmullRom(chain.pos, i, Math.min(1, t + 0.02), p1);
+        let dx = p1.x - p0.x, dy = p1.y - p0.y;
+        if (Math.hypot(dx, dy) < 1e-6) { dx = chain.pos[i + 1].x - chain.pos[i].x; dy = chain.pos[i + 1].y - chain.pos[i].y; }
+        const d = Math.hypot(dx, dy) || 1;
+        const nx = -dy / d, ny = dx / d;
+
+        const s = (i + t) / (n - 1);
+        const w = morph.widthAt(s) * morph.L;
+        left.push(new Vec2(p0.x + nx * w, p0.y + ny * w));
+        right.push(new Vec2(p0.x - nx * w, p0.y - ny * w));
+      }
     }
     return { left, right };
   }
@@ -72,7 +98,7 @@ export class CreatureRenderer {
 
     // Dim interior — transparent tissue, so only a little light scatters through.
     p.noStroke();
-    p.fill(tint[0] * 0.30, tint[1] * 0.34, tint[2] * 0.42, 74);
+    p.fill(tint[0] * 0.30, tint[1] * 0.34, tint[2] * 0.42, 48);
     closedCurve(p, ring);
 
     // Bright rim — the longest optical path through the specimen is at its edge.
@@ -82,7 +108,7 @@ export class CreatureRenderer {
     // rather than a specimen.
     glowStroke(p, (pp) => closedCurve(pp, ring), tint, 0.75, 120, this.cfg.glowLayers);
 
-    const heavy = Math.round(chain.count * 0.55);
+    const heavy = Math.round(left.length * 0.62);
     const anterior = (side) => (pp) => {
       pp.beginShape();
       for (let i = 0; i <= heavy; i++) pp.curveVertex(side[i].x, side[i].y);
@@ -92,31 +118,76 @@ export class CreatureRenderer {
     glowStroke(p, anterior(right), tint, 1.25, 150, 2);
 
     // A faint inner highlight just inside the dorsal margin gives the body
-    // volume without any actual shading model.
-    const inner = left.map((q, i) => {
-      const n = chain.normal(i, this._n);
+    // volume without any actual shading model. Built from the physics nodes,
+    // not the resampled outline — those two arrays have different lengths.
+    const inner = [];
+    for (let i = 0; i < chain.count; i++) {
+      const nrm = chain.normal(i, this._n);
       const w = morph.halfWidth[i] * 0.42;
-      return new Vec2(chain.pos[i].x + n.x * w, chain.pos[i].y + n.y * w);
-    });
+      inner.push(new Vec2(chain.pos[i].x + nrm.x * w, chain.pos[i].y + nrm.y * w));
+    }
     p.stroke(tint[0], tint[1], tint[2], 32);
     p.strokeWeight(0.9);
     p.noFill();
     openCurve(p, inner);
   }
 
-  /** Transverse banding across the thorax: the segment boundaries in the photo. */
+  /**
+   * Transverse banding — the segment boundaries. Runs the length of the trunk,
+   * not just the thorax: the reference photograph shows the abdomen is clearly
+   * segmented too, and a smooth featureless abdomen is what makes a rendering
+   * of an arthropod read as a worm.
+   */
   _drawSegments(p, m) {
-    const { chain, morph, drive } = m;
+    const { chain, morph } = m;
     const tint = this.cfg.bodyTint;
     p.noFill();
     p.strokeWeight(0.8);
+    for (let i = morph.thoraxStart - 2; i < chain.count - 1; i++) {
+      if (i < 1) continue;
+      const n = chain.normal(i, this._n);
+      const w = morph.halfWidth[i] * 0.92;
+      const q = chain.pos[i];
+      // Fainter down the abdomen, where the cuticle is thinner.
+      p.stroke(tint[0], tint[1], tint[2], i <= morph.thoraxEnd ? 26 : 14);
+      p.line(q.x - n.x * w, q.y - n.y * w, q.x + n.x * w, q.y + n.y * w);
+    }
+  }
+
+  /**
+   * The dense speckled masses flanking the midline at each limb base — the
+   * conspicuous granular ovals in the reference photograph (limb bases and
+   * associated tissue). They are one of the strongest cues that the thorax is
+   * full of structure rather than being an empty translucent tube.
+   *
+   * Under additive compositing we cannot draw them dark, so they are rendered
+   * the way darkfield actually shows them: as a dense cluster of fine scattering
+   * points, which reads as granular texture rather than as a solid.
+   */
+  _drawGranules(p, m) {
+    const { chain, morph, drive } = m;
+    const tint = this.cfg.bodyTint;
+    if (!this._speckle) this._speckle = makeSpeckle(46);
+
+    p.noStroke();
     for (let i = 0; i < drive.n; i++) {
       const node = drive.nodeOf[i];
-      const n = chain.normal(node, this._n);
-      const w = morph.halfWidth[node] * 0.92;
       const q = chain.pos[node];
-      p.stroke(tint[0], tint[1], tint[2], 34);
-      p.line(q.x - n.x * w, q.y - n.y * w, q.x + n.x * w, q.y + n.y * w);
+      const n = chain.normal(node, this._n).clone();
+      const t = chain.tangent(node, this._t).clone();
+      const w = morph.halfWidth[node];
+      const rx = w * 0.52, ry = w * 0.34;
+
+      for (const side of [1, -1]) {
+        const cx = q.x + n.x * side * w * 0.66;
+        const cy = q.y + n.y * side * w * 0.66;
+        p.fill(tint[0], tint[1], tint[2], 52);
+        for (let k = 0; k < 18; k++) {
+          const s = this._speckle[(k + i * 7) % this._speckle.length];
+          const lx = s.x * rx, ly = s.y * ry;
+          p.circle(cx + lx * t.x - ly * t.y, cy + lx * t.y + ly * t.x, 0.9 + (k % 2) * 0.5);
+        }
+      }
     }
   }
 
@@ -135,7 +206,15 @@ export class CreatureRenderer {
     }
     if (pts.length < 3) return;
     const c = this.cfg.gutTint;
-    glowStroke(p, (pp) => openCurve(pp, pts), c, g.halfWidth * 2, 78, 2);
+    // Drawn as one crisp stroke at the measured width plus a single faint halo.
+    // The usual multi-pass glow blooms a 0.014 L stripe into a fat ochre bar.
+    p.noFill();
+    p.stroke(c[0], c[1], c[2], 16);
+    p.strokeWeight(g.halfWidth * 3.8);
+    openCurve(p, pts);
+    p.stroke(c[0], c[1], c[2], 56);
+    p.strokeWeight(g.halfWidth * 2);
+    openCurve(p, pts);
   }
 
   // ---------------------------------------------------------------------
@@ -266,8 +345,9 @@ export class CreatureRenderer {
       const ang = L.angle * side;
       const ux = (-t.x) * Math.cos(ang) - (-t.y) * Math.sin(ang);
       const uy = (-t.x) * Math.sin(ang) + (-t.y) * Math.cos(ang);
-      const cx = anchor.x + n.x * side * L.width * 0.52 - ux * L.length * 0.18;
-      const cy = anchor.y + n.y * side * L.width * 0.52 - uy * L.length * 0.18;
+      const off = L.offset ?? 0.52;
+      const cx = anchor.x + n.x * side * L.width * off - ux * L.length * 0.18;
+      const cy = anchor.y + n.y * side * L.width * off - uy * L.length * 0.18;
 
       const pts = [];
       const SEG = 22;
@@ -385,6 +465,28 @@ export class CreatureRenderer {
       }
     }
   }
+}
+
+/**
+ * Catmull-Rom interpolation of `pts` on segment i at parameter t in [0,1].
+ * Endpoints are clamped, so the curve passes through every node and does not
+ * fly off at the head or the furca.
+ */
+function catmullRom(pts, i, t, out) {
+  const n = pts.length;
+  const p0 = pts[Math.max(0, i - 1)];
+  const p1 = pts[i];
+  const p2 = pts[Math.min(n - 1, i + 1)];
+  const p3 = pts[Math.min(n - 1, i + 2)];
+  const t2 = t * t, t3 = t2 * t;
+  const a = -0.5 * t3 + t2 - 0.5 * t;
+  const b = 1.5 * t3 - 2.5 * t2 + 1;
+  const c = -1.5 * t3 + 2 * t2 + 0.5 * t;
+  const d = 0.5 * t3 - 0.5 * t2;
+  return out.set(
+    p0.x * a + p1.x * b + p2.x * c + p3.x * d,
+    p0.y * a + p1.y * b + p2.y * c + p3.y * d,
+  );
 }
 
 /** Deterministic blue-noise-ish speckle inside the unit disc, generated once. */
