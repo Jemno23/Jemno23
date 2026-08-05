@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Computational Sea-Monkey</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%A6%90%3C/text%3E%3C/svg%3E" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #04060b;
+      color: #dfe8f2;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    canvas { display: block; }
+    /* Fallback shown if the page is opened over file:// and ES modules are blocked. */
+    #boot {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      font-size: 13px; line-height: 1.7; text-align: center; opacity: .75;
+      padding: 24px;
+    }
+    #boot code { background: #10151f; padding: 2px 6px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    Loading&hellip;<br />
+    <small>If this message stays, serve the folder over HTTP:<br />
+    <code>python3 -m http.server 8000</code></small>
+  </div>
+
+  <script src="vendor/p5.min.js"></script>
+  <script type="module">
+    import './src/main.js';
+    document.getElementById('boot')?.remove();
+  </script>
+</body>
+</html>
