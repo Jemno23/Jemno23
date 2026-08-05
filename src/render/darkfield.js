@@ -52,6 +52,30 @@ export function closedCurve(p, pts) {
   p.endShape(p.CLOSE);
 }
 
+/**
+ * Straight-segment versions of the two above.
+ *
+ * curveVertex() runs a Catmull-Rom tessellation per vertex, which is worth
+ * paying for when the control points are sparse. It is pure waste once the
+ * geometry has already been sampled densely — the body outline is resampled at
+ * four times the physics resolution, and each limb is built from eight points
+ * across a few dozen pixels. Switching those to plain vertex() is invisible and
+ * bought back the frame budget the new limb rendering had spent.
+ */
+export function closedPoly(p, pts) {
+  if (pts.length < 3) return;
+  p.beginShape();
+  for (const q of pts) p.vertex(q.x, q.y);
+  p.endShape(p.CLOSE);
+}
+
+export function openPoly(p, pts) {
+  if (pts.length < 2) return;
+  p.beginShape();
+  for (const q of pts) p.vertex(q.x, q.y);
+  p.endShape();
+}
+
 /** Emit a smooth open curve through `pts`, duplicating the ends as tangent hints. */
 export function openCurve(p, pts) {
   if (pts.length < 2) return;

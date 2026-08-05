@@ -391,6 +391,58 @@ one antenna buckling into a hook while its mirror stayed straight.
 
 ---
 
+## 5c. The limbs: three separate errors
+
+The limbs were the weakest part of the render, and putting an enlargement of
+the reference next to an enlargement of mine made three distinct problems
+obvious at once.
+
+![limb comparison](limb-comparison.png)
+
+**Structure.** A phyllopod is not a leaf with a fringe. Each one is an
+elongated, recurved PADDLE carrying a dark, densely granular EPIPODITE SAC —
+the gill — over roughly its middle half, with a bright rib along its axis and a
+tuft of fine SETAE springing from the outer quarter of the distal *margin*. The
+gill sacs are the most conspicuous feature of the whole limb row and were
+simply absent; the setae were drawn as a fringe down both sides, which is
+wrong, and at one point radiating from a single point at the tip, which read as
+detached feather dusters.
+
+**Compositing, which mattered more than structure.** The limbs are the one
+part of this animal that must *not* be drawn additively. Everything else is
+thin translucent tissue scattering light and adding is right — but a limb row
+is thick, packed, mutually overlapping flesh. Drawn additively it came out as a
+transparent wireframe lattice, a moiré of intersecting outlines, where the
+reference shows solid mass. Compositing the limbs normally and back to front,
+so a near limb hides the one behind it, is what turns eleven overlapping
+paddles into a dense fan. It is also the only way the gill sacs can read at
+all: on a black field a dark shape is visible only as light it removes, so it
+needs bright tissue around it to remove light *from*.
+
+**A geometry bug that made eleven limbs look like six.** The limb tip angle is
+`sweepBias + A·sin(ψ) + recurve`. With bias 0.42, amplitude 1.02 and recurve
+0.55 the maximum reached 1.83 rad — past π/2 — so for part of every cycle the
+limb rotated beyond straight-posterior and folded back along the trunk, where
+it was hidden behind the body. Constraining the sum to stay comfortably under
+π/2 made all eleven visible at all times. `config.js` carries the warning.
+
+Two smaller consequences. Limbs now articulate at the **body wall** rather than
+the midline: anchoring them on the spine made every base converge to one point,
+drawing a row of bright chevrons down the animal's axis. And the metachronal
+wavelength moved from 5.5 to 8.5 limbs per wave — a ripple cost of 1 % (20 %
+against 19 %, within noise) for a visible gain, because at 5.5 the phase spread
+across eleven limbs exceeds a full cycle so adjacent limbs point in opposite
+directions and cross, where the reference shows them overlapping like roof
+tiles.
+
+The richer limbs cost frame budget, which was bought back by noticing that
+`curveVertex()` — a Catmull-Rom tessellation per vertex — is pure waste on
+geometry that has already been sampled densely. The body outline is resampled
+at 3x the physics resolution and each limb is eight points across a few dozen
+pixels; both draw with plain `vertex()` now, at no visible cost.
+
+---
+
 ## 6. What is still wrong
 
 Ranked by how much each would improve the illusion.

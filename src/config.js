@@ -86,7 +86,8 @@ export const CONFIG = {
      *     all limbs in phase (no wave)   673 %
      *     2.0 limbs per wave             341 %
      *     4.5                             26 %
-     *     5.5                             19 %   <-- here
+     *     5.5                             19 %
+     *     8.5                             20 %   <-- here
      *     11.0 (one wave over the body)   95 %
      *
      * Two things fall out of that table. First, metachrony really is a
@@ -96,22 +97,34 @@ export const CONFIG = {
      * the long powerful middle limbs all fire together. What matters is that
      * the STRONG limbs are spread around the cycle. Run
      * `node tools/measure.mjs metachrony` to reproduce.
+     *
+     * 8.5 is chosen over the marginally smoother 5.5 because the difference in
+     * ripple is within noise (20 % vs 19 %) while the difference in appearance
+     * is not: at 5.5 the phase spread across eleven limbs exceeds a full cycle,
+     * so adjacent limbs point in opposite directions and cross each other. In
+     * the reference photograph the limbs lie in a smooth monotonic progression,
+     * overlapping like roof tiles, which needs the longer wave.
      */
-    limbsPerWave: 5.5,
+    limbsPerWave: 8.5,
 
     beatHzRest: 2.6,         // glide
     beatHzCruise: 5.4,       // steady swimming
     beatHzBurst: 9.0,        // escape
 
-    sweepAmplitude: 1.02,    // rad, half-angle of the stroke arc
+    sweepAmplitude: 0.80,    // rad, half-angle of the stroke arc
     /**
      * Posterior bias of the stroke arc. The limbs do not sweep about a line
      * perpendicular to the body; the whole arc is tilted backwards, which is
      * why a swimming Artemia looks like it is combing water toward its tail.
      * Purely geometric — it offsets the angle without touching angular
      * velocity, so thrust is unaffected.
+     *
+     * KEEP bias + amplitude + render.limbRecurve COMFORTABLY UNDER pi/2. Past
+     * that the limb tip rotates beyond straight-posterior and folds back along
+     * the trunk, where it is hidden — which is what made eleven limbs read as
+     * five or six.
      */
-    sweepBias: 0.42,
+    sweepBias: 0.15,
     /**
      * Phase warp k in psi = phase + k*sin(phase). Skews the sinusoid so the
      * power stroke is fast and the recovery stroke slow, which is what a paddle
@@ -130,7 +143,7 @@ export const CONFIG = {
     featherTransition: 0.22,
 
     /** Thrust coefficient: F = k * area * (r*omega)^2, quadratic drag on a paddle. */
-    thrustGain: 0.013,
+    thrustGain: 0.0214,
 
     /**
      * Limb length as a fraction of L, before the along-body taper. Measured off
@@ -211,6 +224,13 @@ export const CONFIG = {
   render: {
     bg: [4, 6, 11],
     glowLayers: 3,
+    /**
+     * Constant posterior hook of each thoracopod, radians from base to tip.
+     * Purely geometric — it does not enter the thrust calculation, which uses
+     * angular velocity only — but it is what gives the limb row the recurved,
+     * roof-tiled look of the reference.
+     */
+    limbRecurve: 0.35,
     /**
      * Fraction of the previous frame retained each draw. Imitates the sensor
      * smear of a real microscopy camera and gives fast limb strokes a faint

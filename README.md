@@ -20,6 +20,12 @@ per-column brightness runs, not by eye. See
 
 ![anatomy](docs/anatomy.png)
 
+The limbs were rebuilt the same way — reference enlargement above, simulation
+below. Each thoracopod is a recurved paddle carrying a dark granular gill sac,
+with a setal tuft on its distal margin:
+
+![limb comparison](docs/limb-comparison.png)
+
 ---
 
 ## Run it
@@ -150,6 +156,15 @@ Full detail, including the several things that turned out to be wrong, is in
   limb field sat 6 % of body length too far forward, and the limb blades were a
   third too short. Correcting the abdomen then required decoupling mass from
   cross-sectional area, or the trailing whip would have been lost.
+- **The limbs must not be drawn additively.** Everything else on this animal is
+  thin translucent tissue scattering light, so adding is right — but a limb row
+  is thick, packed, overlapping flesh, and additively it renders as a wireframe
+  lattice where the reference shows solid mass. Compositing them normally, back
+  to front, is also the only way the dark gill sacs can read: on a black field a
+  dark shape is visible only as light it removes.
+- **A sign-range bug made eleven limbs look like six.** `bias + amplitude +
+  recurve` exceeded π/2, so for part of each cycle every limb rotated past
+  straight-posterior and folded back along the trunk, hidden behind the body.
 - **Buoyancy was conceptually wrong.** This is a top-down microscope view;
   gravity points into the screen. It was replaced by an ambient current shared
   by the creature *and* the debris, which is a much stronger cue that they are

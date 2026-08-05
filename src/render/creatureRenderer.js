@@ -1,6 +1,6 @@
 import { Vec2 } from '../core/vec2.js';
 import { clamp, lerp } from '../core/mathx.js';
-import { glowStroke, closedCurve, openCurve } from './darkfield.js';
+import { glowStroke, closedCurve, openCurve, closedPoly, openPoly } from './darkfield.js';
 
 /**
  * CreatureRenderer — draws a SeaMonkey.
@@ -38,7 +38,6 @@ export class CreatureRenderer {
     this._drawLimbs(p, m);
     this._drawBody(p, chain, morph);
     this._drawSegments(p, m);
-    this._drawGranules(p, m);
     this._drawGut(p, chain, morph);
     this._drawAntennae(p, m);
     this._drawFurca(p, m);
@@ -64,7 +63,7 @@ export class CreatureRenderer {
    * simulation to fix a drawing problem, and it would change the dynamics.
    */
   _outline(chain, morph) {
-    const SUBDIV = 4;
+    const SUBDIV = 3;
     const left = [], right = [];
     const n = chain.count;
     const p0 = new Vec2(), p1 = new Vec2();
@@ -98,20 +97,20 @@ export class CreatureRenderer {
 
     // Dim interior — transparent tissue, so only a little light scatters through.
     p.noStroke();
-    p.fill(tint[0] * 0.30, tint[1] * 0.34, tint[2] * 0.42, 48);
-    closedCurve(p, ring);
+    p.fill(tint[0] * 0.34, tint[1] * 0.38, tint[2] * 0.46, 92);
+    closedPoly(p, ring);
 
     // Bright rim — the longest optical path through the specimen is at its edge.
     // Drawn in two passes so the line weight tracks the body's own width: a
     // constant-weight outline makes the slender abdomen read as a thick glowing
     // tube, which is the single thing that most made this look like a diagram
     // rather than a specimen.
-    glowStroke(p, (pp) => closedCurve(pp, ring), tint, 0.75, 120, this.cfg.glowLayers);
+    glowStroke(p, (pp) => closedPoly(pp, ring), tint, 0.75, 120, this.cfg.glowLayers);
 
     const heavy = Math.round(left.length * 0.62);
     const anterior = (side) => (pp) => {
       pp.beginShape();
-      for (let i = 0; i <= heavy; i++) pp.curveVertex(side[i].x, side[i].y);
+      for (let i = 0; i <= heavy; i++) pp.vertex(side[i].x, side[i].y);
       pp.endShape();
     };
     glowStroke(p, anterior(left), tint, 1.25, 150, 2);
@@ -155,43 +154,6 @@ export class CreatureRenderer {
   }
 
   /**
-   * The dense speckled masses flanking the midline at each limb base — the
-   * conspicuous granular ovals in the reference photograph (limb bases and
-   * associated tissue). They are one of the strongest cues that the thorax is
-   * full of structure rather than being an empty translucent tube.
-   *
-   * Under additive compositing we cannot draw them dark, so they are rendered
-   * the way darkfield actually shows them: as a dense cluster of fine scattering
-   * points, which reads as granular texture rather than as a solid.
-   */
-  _drawGranules(p, m) {
-    const { chain, morph, drive } = m;
-    const tint = this.cfg.bodyTint;
-    if (!this._speckle) this._speckle = makeSpeckle(46);
-
-    p.noStroke();
-    for (let i = 0; i < drive.n; i++) {
-      const node = drive.nodeOf[i];
-      const q = chain.pos[node];
-      const n = chain.normal(node, this._n).clone();
-      const t = chain.tangent(node, this._t).clone();
-      const w = morph.halfWidth[node];
-      const rx = w * 0.52, ry = w * 0.34;
-
-      for (const side of [1, -1]) {
-        const cx = q.x + n.x * side * w * 0.66;
-        const cy = q.y + n.y * side * w * 0.66;
-        p.fill(tint[0], tint[1], tint[2], 52);
-        for (let k = 0; k < 18; k++) {
-          const s = this._speckle[(k + i * 7) % this._speckle.length];
-          const lx = s.x * rx, ly = s.y * ry;
-          p.circle(cx + lx * t.x - ly * t.y, cy + lx * t.y + ly * t.x, 0.9 + (k % 2) * 0.5);
-        }
-      }
-    }
-  }
-
-  /**
    * The gut: a warm ochre tube running nose to furca. It is by some distance
    * the strongest single realism cue in the reference photograph — a translucent
    * animal with no visible viscera reads as glass.
@@ -222,16 +184,33 @@ export class CreatureRenderer {
   // ---------------------------------------------------------------------
 
   /**
-   * Each phyllopod is drawn as an arc swept from the limb's own instantaneous
-   * angle, with a curl proportional to its angular velocity (the blade loads up
-   * and bends against the water) and a setal fringe whose spread is the *same*
-   * `area` term the thrust calculation used. So the legs visibly fan on the
-   * power stroke and feather on the recovery — you can read the propulsion
-   * model straight off the picture, because it is the propulsion model.
+   * The thoracopods, rebuilt from a close reading of the reference photograph.
+   *
+   * The first version drew each limb as a translucent leaf with a setal fringe
+   * down both margins, composited additively like the rest of the animal.
+   * Enlarging the photograph and putting the two side by side showed two
+   * separate errors.
+   *
+   * STRUCTURE. A phyllopod is not a leaf. Each one is an elongated, recurved
+   * PADDLE carrying a dark, densely granular EPIPODITE SAC (the gill) over
+   * roughly its middle half — by far its most conspicuous feature — with a
+   * bright rib along its axis and a tuft of fine SETAE springing from the
+   * outer quarter of the distal margin, not a fringe running down the sides.
+   *
+   * COMPOSITING, which mattered more. The limbs are the one part of this
+   * animal that must NOT be drawn additively. Everything else is thin
+   * translucent tissue scattering light, and adding is right; but a limb row
+   * is thick, packed, mutually overlapping flesh, and drawn additively it came
+   * out as a transparent wireframe lattice where the reference shows solid
+   * mass. Compositing them normally, back to front, means a near limb hides
+   * the one behind it — which is what makes eleven overlapping paddles read as
+   * a dense fan instead of a moiré pattern. It also lets the gill sacs read at
+   * all: on a black field a dark shape is only visible as light it removes.
    */
   _drawLimbs(p, m) {
     const { chain, drive } = m;
     const tint = this.cfg.bodyTint;
+    const geo = [];
 
     for (let i = 0; i < drive.n; i++) {
       const node = drive.nodeOf[i];
@@ -242,24 +221,120 @@ export class CreatureRenderer {
       const theta = drive.angle[i];
       const len = drive.lengthOf[i];
       const spread = drive.spreadOf(i);
-      // Blade lag: the leaf trails its own hinge, scaled by tip speed.
-      const curl = clamp(-drive.angVel[i] * 0.045, -0.9, 0.9);
+      // Blade lag: the paddle trails its own hinge, scaled by tip speed.
+      const curl = clamp(-drive.angVel[i] * 0.040, -0.8, 0.8);
 
+      const hw = m.morph.halfWidth[node];
       for (const side of [1, -1]) {
-        this._drawBlade(p, anchor, t, n, side, theta, curl, len, spread, tint);
+        geo.push(this._limbGeometry(anchor, t, n, side, theta, curl, len, spread, i, hw));
       }
+    }
+
+    // Anterior first, so each limb is overlapped by the one behind it, as in
+    // the photograph. Opaque compositing throughout — see the note above.
+    p.blendMode(p.BLEND);
+    if (!this._speckle) this._speckle = makeSpeckle(46);
+    for (const g of geo) this._drawLimb(p, g, tint);
+    p.blendMode(p.ADD);
+  }
+
+  _drawLimb(p, g, tint) {
+    const sp = g.spread;
+
+    // Setae first: fine and behind the membrane, so a limb in front of them
+    // cleanly cuts them off rather than showing through.
+    this._setalTuft(p, g, tint);
+
+    // Membrane — solid pale tissue.
+    p.noStroke();
+    p.fill(tint[0] * 0.62, tint[1] * 0.68, tint[2] * 0.76, lerp(190, 228, sp));
+    closedPoly(p, g.left.concat(g.right.slice().reverse()));
+
+    // Gill sac — the one dark structure on the limb.
+    p.fill(9, 13, 21, lerp(215, 245, sp));
+    closedPoly(p, g.sac);
+
+    // Granules: fine bright scatterers on the dark ground.
+    p.fill(tint[0], tint[1], tint[2], lerp(120, 175, sp));
+    // Every other station, five granules each. Denser than this looks no
+    // different at any realistic zoom and costs ~1500 circles a frame.
+    for (let ci = 0; ci < g.sacCentres.length; ci += 2) {
+      const q = g.sacCentres[ci];
+      for (let k = 0; k < 5; k++) {
+        const s = this._speckle[(k * 5 + ci * 3 + g.index * 7) % this._speckle.length];
+        p.circle(q.mid.x + (s.x * 0.85) * q.w * q.px + (s.y * 0.9) * q.w * -q.py,
+                 q.mid.y + (s.x * 0.85) * q.w * q.py + (s.y * 0.9) * q.w * q.px,
+                 0.9 + (k % 2) * 0.4);
+      }
+    }
+
+    // Bright margins and the rib along the limb axis.
+    p.noFill();
+    p.strokeWeight(0.6);
+    p.stroke(tint[0], tint[1], tint[2], lerp(70, 110, sp));
+    openPoly(p, g.left);
+    openPoly(p, g.right);
+    // One prominent rib per limb, as in the photograph — not a bright outline
+    // on every edge, which turns the row into a lattice of intersecting lines.
+    p.strokeWeight(1.0);
+    p.stroke(tint[0], tint[1], tint[2], lerp(135, 180, sp));
+    openPoly(p, g.spine.slice(2));
+  }
+
+  /**
+   * Distal setal tuft. Roots walk along the outer quarter of the blade MARGIN
+   * rather than all springing from the tip — radiating everything from one
+   * point produced starbursts that read as detached feather dusters. Real setae
+   * are near-parallel, close-packed and only gently splayed.
+   */
+  _setalTuft(p, g, tint) {
+    const nSet = 9;
+    const L = g.len * lerp(0.30, 0.54, g.spread);
+    const fanMax = lerp(0.05, 0.17, g.spread);
+    const margin = g.side > 0 ? g.left : g.right;
+    const last = margin.length - 1;
+    p.noFill();
+    p.strokeWeight(0.5);
+    p.stroke(tint[0] * 0.50, tint[1] * 0.56, tint[2] * 0.66, lerp(70, 120, g.spread));
+    const baseA = Math.atan2(g.tipDir.y, g.tipDir.x);
+    for (let s = 0; s < nSet; s++) {
+      const f = s / (nSet - 1);
+      const kf = (0.66 + 0.34 * f) * last;
+      const k0 = Math.min(last - 1, Math.floor(kf));
+      const fr = kf - k0;
+      let px = lerp(margin[k0].x, margin[k0 + 1].x, fr);
+      let py = lerp(margin[k0].y, margin[k0 + 1].y, fr);
+      const a0 = baseA + (f - 0.5) * 2 * fanMax;
+      p.beginShape();
+      p.vertex(px, py);
+      const SEG = 2;
+      for (let k = 1; k <= SEG; k++) {
+        const a = a0 - (k / SEG) * 0.34 * g.side;
+        px += Math.cos(a) * (L / SEG);
+        py += Math.sin(a) * (L / SEG);
+        p.vertex(px, py);
+      }
+      p.endShape();
     }
   }
 
-  _drawBlade(p, anchor, t, n, side, theta, curl, len, spread, tint) {
-    const STEPS = 6;
+  /** Integrate a turning direction along the limb to get its curved axis. */
+  _limbGeometry(anchor, t, n, side, theta, curl, len, spread, index, halfWidth = 0) {
+    const STEPS = 7;
+    const recurve = this.cfg.limbRecurve ?? 0.55;
+    // Limbs articulate at the BODY WALL, not the midline. Anchoring them on the
+    // spine made every base converge to one point, which drew a row of bright
+    // chevrons down the animal's axis and buried the proximal blade inside the
+    // trunk. Offsetting to the margin also matches where they actually attach.
     const spine = [];
-    let x = anchor.x, y = anchor.y;
+    let x = anchor.x + n.x * side * halfWidth * 0.85;
+    let y = anchor.y + n.y * side * halfWidth * 0.85;
     spine.push(new Vec2(x, y));
     for (let k = 1; k <= STEPS; k++) {
       const u = k / STEPS;
-      // Integrating a turning direction along the blade gives a natural arc.
-      const a = theta + curl * u * u;
+      // Constant recurve gives the characteristic hook; the angular-velocity
+      // term adds the extra bend of a blade loaded against the water.
+      const a = theta + recurve * u + curl * u * u;
       const dx = (n.x * side * Math.cos(a) + t.x * Math.sin(a));
       const dy = (n.y * side * Math.cos(a) + t.y * Math.sin(a));
       x += dx * (len / STEPS);
@@ -267,61 +342,48 @@ export class CreatureRenderer {
       spine.push(new Vec2(x, y));
     }
 
-    // Leaf outline: widest around 55% of the blade, tapering to a point.
-    const wMax = len * 0.185 * lerp(0.60, 1, spread);
+    // Paddle outline — a long tapering blade, not a pointed leaf.
+    const wMax = len * 0.26 * lerp(0.66, 1, spread);
     const left = [], right = [];
     for (let k = 0; k <= STEPS; k++) {
       const u = k / STEPS;
-      const w = wMax * Math.sin(Math.PI * Math.pow(u, 0.55));
+      const w = wMax * Math.sin(Math.PI * Math.pow(u, 0.42)) ** 0.75;
       const a = spine[Math.max(0, k - 1)], b = spine[Math.min(STEPS, k + 1)];
-      const dx = b.x - a.x, dy = b.y - a.y;
+      let dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 1;
       const px = -dy / d, py = dx / d;
       left.push(new Vec2(spine[k].x + px * w, spine[k].y + py * w));
       right.push(new Vec2(spine[k].x - px * w, spine[k].y - py * w));
     }
 
-    const alpha = lerp(15, 38, spread);
-    p.noStroke();
-    p.fill(tint[0] * 0.42, tint[1] * 0.48, tint[2] * 0.58, alpha);
-    closedCurve(p, left.concat(right.slice().reverse()));
-
-    p.stroke(tint[0], tint[1], tint[2], lerp(44, 88, spread));
-    p.strokeWeight(0.65);
-    p.noFill();
-    openCurve(p, left);
-    openCurve(p, right);
-
-    // Setal fringe: many fine, near-parallel hairs along BOTH margins, as in
-    // the reference. Two mistakes to avoid, both of which read instantly as
-    // wrong — too few hairs (the limb looks like a comb) and too much fan
-    // angle (it looks like a starburst instead of a feather). Real setae are
-    // dense, short relative to the blade, and only slightly splayed.
-    const nSet = 14;
-    const setaLen = len * lerp(0.07, 0.26, spread);
-    p.strokeWeight(0.45);
-    p.stroke(tint[0], tint[1], tint[2], lerp(20, 62, spread));
-    for (const margin of [left, right]) {
-      for (let s = 0; s < nSet; s++) {
-        const u = 0.20 + 0.78 * (s / (nSet - 1));
-        const k = u * STEPS;
-        const k0 = Math.min(STEPS - 1, Math.floor(k));
-        const f = k - k0;
-        const bx = lerp(margin[k0].x, margin[k0 + 1].x, f);
-        const by = lerp(margin[k0].y, margin[k0 + 1].y, f);
-        const ax = lerp(spine[k0].x, spine[k0 + 1].x, f);
-        const ay = lerp(spine[k0].y, spine[k0 + 1].y, f);
-        let dx = bx - ax, dy = by - ay;
-        const d = Math.hypot(dx, dy) || 1;
-        dx /= d; dy /= d;
-        // Slight fan, biased distally so the fringe sweeps toward the tip.
-        const fan = lerp(0.06, 0.30, spread) * (u - 0.6);
-        const c = Math.cos(fan), sn = Math.sin(fan);
-        const ex = dx * c - dy * sn, ey = dx * sn + dy * c;
-        const L = setaLen * (0.65 + 0.55 * Math.sin(Math.PI * u));
-        p.line(bx, by, bx + ex * L, by + ey * L);
-      }
+    // Gill sac: an oval over the middle third, biased to one margin.
+    const sac = [];
+    const a0 = 0.20, a1 = 0.78;
+    for (let k = 0; k <= STEPS; k++) {
+      const u = k / STEPS;
+      if (u < a0 || u > a1) continue;
+      const v = (u - a0) / (a1 - a0);
+      const w = wMax * 0.66 * Math.sin(Math.PI * v) ** 0.5;
+      const mid = Vec2.lerp(spine[k], side > 0 ? left[k] : right[k], 0.22);
+      const a = spine[Math.max(0, k - 1)], b = spine[Math.min(STEPS, k + 1)];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const px = -dy / d, py = dx / d;
+      sac.push({ mid, px, py, w });
     }
+    const sacRing = sac.map((q) => new Vec2(q.mid.x + q.px * q.w, q.mid.y + q.py * q.w))
+      .concat(sac.slice().reverse().map((q) => new Vec2(q.mid.x - q.px * q.w, q.mid.y - q.py * q.w)));
+
+    // Tip direction, for the distal setal tuft.
+    const tipA = spine[STEPS - 1], tipB = spine[STEPS];
+    const tdx = tipB.x - tipA.x, tdy = tipB.y - tipA.y;
+    const td = Math.hypot(tdx, tdy) || 1;
+
+    return {
+      spine, left, right, sac: sacRing, spread, len, side, index,
+      tip: tipB, tipDir: new Vec2(tdx / td, tdy / td),
+      sacCentres: sac,
+    };
   }
 
   // ---------------------------------------------------------------------
