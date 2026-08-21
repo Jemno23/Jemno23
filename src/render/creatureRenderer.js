@@ -95,10 +95,17 @@ export class CreatureRenderer {
     const ring = left.concat(right.slice().reverse());
     const tint = this.cfg.bodyTint;
 
-    // Dim interior — transparent tissue, so only a little light scatters through.
+    // Trunk interior. Composited NORMALLY, not additively, so it is genuinely
+    // opaque: the trunk is the densest part of the animal and should hide the
+    // proximal ends of the limbs behind it rather than letting them show
+    // through. Additive tissue can only ever get brighter than what is behind
+    // it, which is why the body used to read as a translucent sleeve with limb
+    // shapes visible inside.
+    p.blendMode(p.BLEND);
     p.noStroke();
-    p.fill(tint[0] * 0.42, tint[1] * 0.46, tint[2] * 0.52, 150);
+    p.fill(tint[0] * 0.82, tint[1] * 0.86, tint[2] * 0.90, 228);
     closedPoly(p, ring);
+    p.blendMode(p.ADD);
 
     // Bright rim — the longest optical path through the specimen is at its edge.
     // Drawn in two passes so the line weight tracks the body's own width: a
@@ -168,15 +175,20 @@ export class CreatureRenderer {
     }
     if (pts.length < 3) return;
     const c = this.cfg.gutTint;
-    // Drawn as one crisp stroke at the measured width plus a single faint halo.
-    // The usual multi-pass glow blooms a 0.014 L stripe into a fat ochre bar.
+    // Composited normally, not additively. Measuring the reference gives the
+    // gut RGB (141,153,155) against a trunk of (170,186,191) — the gut is
+    // DARKER than the tissue around it, and warmer. An additive stripe can only
+    // brighten, so once the trunk became opaque and bright the gut simply
+    // vanished into it.
+    p.blendMode(p.BLEND);
     p.noFill();
-    p.stroke(c[0], c[1], c[2], 16);
-    p.strokeWeight(g.halfWidth * 3.8);
+    p.stroke(c[0], c[1], c[2], 46);
+    p.strokeWeight(g.halfWidth * 3.4);
     openCurve(p, pts);
-    p.stroke(c[0], c[1], c[2], 56);
+    p.stroke(c[0] * 0.84, c[1] * 0.82, c[2] * 0.72, 168);
     p.strokeWeight(g.halfWidth * 2);
     openCurve(p, pts);
+    p.blendMode(p.ADD);
   }
 
   // ---------------------------------------------------------------------
@@ -268,34 +280,36 @@ export class CreatureRenderer {
 
     // Membrane — solid pale tissue.
     p.noStroke();
-    p.fill(tint[0] * 0.86, tint[1] * 0.90, tint[2] * 0.94, lerp(196, 226, sp));
+    p.fill(tint[0] * 0.94, tint[1] * 0.96, tint[2] * 0.98, lerp(224, 246, sp));
     closedPoly(p, g.left.concat(g.right.slice().reverse()));
+
+    // The proximal half is whiter than the distal, as in the animal: the limb
+    // is thickest where it meets the body and thins toward the tip, so more
+    // tissue lies in the light path there. Drawn as a second near-white fill
+    // over the inboard portion of the blade only.
+    const half = Math.max(2, Math.round(g.left.length * 0.58));
+    const prox = g.left.slice(0, half)
+      .concat(g.right.slice(0, half).reverse());
+    p.fill(255, 255, 255, lerp(55, 85, sp));
+    closedPoly(p, prox);
 
     // Gill sac.
     //
-    // NOT a dark oval with bright specks — that was backwards, and measuring
-    // the reference is what caught it. Sampling a sac there gives a mean
-    // luminance of 154 with a 10th percentile of 74: it is BRIGHT tissue
-    // densely packed with DARK granules, and its apparent darkness is the
-    // average of fine structure rather than an area of flat ink. So the
-    // membrane keeps its brightness, takes only a light wash, and the
-    // granulation is drawn as many small dark dots over it.
-    p.fill(16, 21, 30, lerp(30, 46, sp));
+    // Rendered as a soft tonal shadow only. It used to carry a scatter of dark
+    // granules, matching the granulation visible in the reference photograph,
+    // but at simulation scale those read as hard black dots peppering every
+    // leg rather than as fine tissue texture — so the sac is now just a gentle
+    // darkening that gives the limb some internal depth without any black in
+    // it. Two soft passes rather than one flat fill, so it has a centre and
+    // fades out toward the sac margin instead of ending on an edge.
+    p.fill(120, 132, 148, lerp(26, 38, sp));
     closedCurve(p, g.sac);
-
-    p.fill(11, 15, 23, lerp(150, 190, sp));
-    const spk = this._speckle, nspk = spk.length;
-    for (let ci = 0; ci < g.sacCentres.length; ci++) {
-      const q = g.sacCentres[ci];
-      for (let k = 0; k < 6; k++) {
-        // Stride by a number coprime with the table length so successive
-        // granules land far apart on the spiral instead of clustering.
-        const s = spk[(ci * 17 + k * 7 + g.index * 5) % nspk];
-        p.circle(q.mid.x + (s.x * 0.92) * q.w * q.px + (s.y * 0.96) * q.w * -q.py,
-                 q.mid.y + (s.x * 0.92) * q.w * q.py + (s.y * 0.96) * q.w * q.px,
-                 1.0 + (k % 3) * 0.4);
-      }
-    }
+    p.fill(104, 116, 134, lerp(22, 32, sp));
+    closedCurve(p, g.sac.map((q, i) => {
+      const c = g.sacCentres[Math.min(g.sacCentres.length - 1,
+        i < g.sacCentres.length ? i : g.sac.length - 1 - i)];
+      return c ? new Vec2(q.x + (c.mid.x - q.x) * 0.42, q.y + (c.mid.y - q.y) * 0.42) : q;
+    }));
 
     // Bright margins and the rib along the limb axis.
     p.noFill();
@@ -476,15 +490,21 @@ export class CreatureRenderer {
         pts.push(new Vec2(cx + lx * ux - ly * uy, cy + lx * uy + ly * ux));
       }
 
+      // The head lobes, like the trunk, composite normally so they read as
+      // real tissue rather than a faint wash. Still translucent — you can see
+      // the head through them in the photograph — but substantial enough to
+      // have a face.
+      p.blendMode(p.BLEND);
       p.noStroke();
-      p.fill(tint[0] * 0.34, tint[1] * 0.38, tint[2] * 0.46, 34);
+      p.fill(tint[0] * 0.64, tint[1] * 0.67, tint[2] * 0.71, 206);
       closedCurve(p, pts);
-      glowStroke(p, (pp) => closedCurve(pp, pts), tint, 0.9, 96, 2);
+      p.blendMode(p.ADD);
+      glowStroke(p, (pp) => closedCurve(pp, pts), tint, 1.0, 150, 2);
 
       // Granular texture, as in the photograph. Fixed in the lobe's own frame so
       // it travels with the tissue instead of crawling across it.
       p.noStroke();
-      p.fill(tint[0], tint[1], tint[2], 44);
+      p.fill(tint[0], tint[1], tint[2], 78);
       for (const s of this._speckle) {
         const lx = s.x * L.length * 0.42, ly = s.y * L.width * 0.42;
         p.circle(cx + lx * ux - ly * uy, cy + lx * uy + ly * ux, s.r);
@@ -526,8 +546,8 @@ export class CreatureRenderer {
       const ey = anchor.y + n.y * side * e.offset - t.y * e.stalk;
 
       p.blendMode(p.ADD);
-      p.stroke(tint[0], tint[1], tint[2], 70);
-      p.strokeWeight(e.radius * 0.8);
+      p.stroke(tint[0] * 0.72, tint[1] * 0.76, tint[2] * 0.80, 28);
+      p.strokeWeight(e.radius * 0.6);
       p.line(sx, sy, ex, ey);
 
       p.blendMode(p.BLEND);

@@ -489,6 +489,28 @@ never running. The measurements looked stubbornly flat and the visual would not
 improve. Verify that an edit landed before concluding anything from what it
 did.
 
+### Art direction over measurement
+
+Two later changes deliberately depart from the measured reference, on the
+client's call, and they are worth separating from the corrections above
+because they are preference rather than error.
+
+The gill sacs no longer carry granulation. The reference genuinely has it, and
+matching it raised the measured fidelity — but at simulation scale the granules
+render as hard black dots peppering every leg rather than as fine tissue
+texture, and they read worse. The sac is now a soft tonal shadow only.
+
+The animal is also deliberately whiter and more opaque than the photograph:
+mean luminance 177 against the reference's 149, with the trunk, head lobes and
+gut all composited normally rather than additively so they genuinely occlude
+what is behind them. Two things fell out of that switch, both instructive.
+Additive tissue can only ever brighten what is under it, so as soon as the
+trunk became bright and opaque the gut — which measurement shows is *darker*
+than the tissue around it, RGB (141,153,155) against (170,186,191) — vanished
+completely and had to move to normal compositing too. And the eye stalk, a
+faint additive line that was invisible on a dark head, became a white bar
+sticking out of the eye.
+
 ### What a 2-D vector renderer will not reach
 
 The remaining gap is mostly not tunable. The photograph has real depth of
