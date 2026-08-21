@@ -443,6 +443,64 @@ pixels; both draw with plain `vertex()` now, at no visible cost.
 
 ---
 
+## 5d. Matching the photograph's tone, by measuring it
+
+Judging "does it look like the photo?" by eye kept producing changes that felt
+better and measured worse. Sampling both images over proportionally identical
+regions — boxes defined in body-length units so the comparison is like for
+like — turned it into arithmetic.
+
+![reference above, simulation below](reference-comparison.png)
+
+| region | metric | reference | before | after |
+|---|---|---|---|---|
+| whole animal | mean luminance | 149 | 92 | **138** |
+| whole animal | p90 luminance | 213 | 152 | **206** |
+| whole animal | lit fraction | 52 % | 24 % | 43 % |
+| limb row | lit fraction | 72 % | 42 % | 52 % |
+| tissue | warmth, R−B | −20 | −34 | **−24** |
+
+Three things came out of it.
+
+**The tissue was the wrong colour, and by a measurable amount.** Sampling the
+specimen gives R−B = −20: a near-neutral white with a slight cool cast. The
+palette had been `[186, 214, 236]`, R−B = −50, which renders an animal that is
+distinctly *blue* where the photograph is silver-white. Nobody would have
+called that out by eye; it just looked a bit synthetic.
+
+**The gill sacs were inside-out.** They had been drawn as near-black ovals with
+a few bright specks. Sampling one in the reference gives a mean luminance of
+154 with a 10th percentile of 74 — it is *bright tissue densely packed with
+dark granules*, and its apparent darkness is the average of fine structure
+rather than an area of flat ink. Inverting that was the single largest visual
+gain in this pass.
+
+**A darkfield photograph is not hard-edged.** Nearly all the remaining lit-
+fraction gap was pure black between structures, where the reference has
+out-of-focus scatter and halation around every bright thing. A soft additive
+halo drawn *before* the opaque limbs — so solid tissue covers it where they
+overlap and it survives only at the edges, which is what halation is — closes
+part of that.
+
+A process note worth recording, because it cost several wasted rounds: two of
+the edits in this pass silently failed to apply (a string replace that matches
+nothing is a no-op), and the numbers were then tuned against code that was
+never running. The measurements looked stubbornly flat and the visual would not
+improve. Verify that an edit landed before concluding anything from what it
+did.
+
+### What a 2-D vector renderer will not reach
+
+The remaining gap is mostly not tunable. The photograph has real depth of
+field, so limbs at different heights blur differently; it has genuine
+tissue texture at every scale; and its limbs are individually irregular in a
+way that procedural geometry, which draws eleven instances of one rule, is not.
+Getting closer than this means a different rendering approach — per-limb noise
+displacement of the outline, and a depth-ordered blur — rather than different
+constants.
+
+---
+
 ## 6. What is still wrong
 
 Ranked by how much each would improve the illusion.

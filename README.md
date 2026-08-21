@@ -20,9 +20,13 @@ per-column brightness runs, not by eye. See
 
 ![anatomy](docs/anatomy.png)
 
-The limbs were rebuilt the same way — reference enlargement above, simulation
-below. Each thoracopod is a recurved paddle carrying a dark granular gill sac,
-with a setal tuft on its distal margin:
+Tone was matched the same way — sampling both images over proportionally
+identical regions rather than judging by eye. That caught a tissue colour that
+was measurably too blue (R−B −50 against the reference's −20) and gill sacs
+rendered inside-out: they are bright tissue packed with dark granules, not dark
+ovals with bright specks. Reference above, simulation below:
+
+![reference comparison](docs/reference-comparison.png)
 
 ![limb comparison](docs/limb-comparison.png)
 

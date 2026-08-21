@@ -237,8 +237,14 @@ export const CONFIG = {
      * comet trail. Too much and the whole field turns to streaks.
      */
     persistence: 0.18,
-    bodyTint: [186, 214, 236],
-    gutTint: [196, 172, 110],
+    /**
+     * Tissue colour, measured off the reference rather than chosen. Sampling
+     * the specimen gives R-B = -20: a near-neutral white with only a slight
+     * cool cast. The old [186,214,236] was R-B = -50, which rendered the animal
+     * distinctly blue where the photograph is silver-white.
+     */
+    bodyTint: [220, 230, 236],
+    gutTint: [200, 188, 150],
     eyeTint: [74, 12, 16],
     particleCount: 320,
     particleAdvection: 0.55,

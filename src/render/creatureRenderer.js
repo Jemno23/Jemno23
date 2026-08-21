@@ -97,7 +97,7 @@ export class CreatureRenderer {
 
     // Dim interior — transparent tissue, so only a little light scatters through.
     p.noStroke();
-    p.fill(tint[0] * 0.34, tint[1] * 0.38, tint[2] * 0.46, 92);
+    p.fill(tint[0] * 0.42, tint[1] * 0.46, tint[2] * 0.52, 150);
     closedPoly(p, ring);
 
     // Bright rim — the longest optical path through the specimen is at its edge.
@@ -105,7 +105,7 @@ export class CreatureRenderer {
     // constant-weight outline makes the slender abdomen read as a thick glowing
     // tube, which is the single thing that most made this look like a diagram
     // rather than a specimen.
-    glowStroke(p, (pp) => closedPoly(pp, ring), tint, 0.75, 120, this.cfg.glowLayers);
+    glowStroke(p, (pp) => closedPoly(pp, ring), tint, 0.85, 145, this.cfg.glowLayers);
 
     const heavy = Math.round(left.length * 0.62);
     const anterior = (side) => (pp) => {
@@ -113,8 +113,8 @@ export class CreatureRenderer {
       for (let i = 0; i <= heavy; i++) pp.vertex(side[i].x, side[i].y);
       pp.endShape();
     };
-    glowStroke(p, anterior(left), tint, 1.25, 150, 2);
-    glowStroke(p, anterior(right), tint, 1.25, 150, 2);
+    glowStroke(p, anterior(left), tint, 1.15, 140, 2);
+    glowStroke(p, anterior(right), tint, 1.15, 140, 2);
 
     // A faint inner highlight just inside the dorsal margin gives the body
     // volume without any actual shading model. Built from the physics nodes,
@@ -148,7 +148,7 @@ export class CreatureRenderer {
       const w = morph.halfWidth[i] * 0.92;
       const q = chain.pos[i];
       // Fainter down the abdomen, where the cuticle is thinner.
-      p.stroke(tint[0], tint[1], tint[2], i <= morph.thoraxEnd ? 26 : 14);
+      p.stroke(tint[0], tint[1], tint[2], i <= morph.thoraxEnd ? 16 : 10);
       p.line(q.x - n.x * w, q.y - n.y * w, q.x + n.x * w, q.y + n.y * w);
     }
   }
@@ -230,6 +230,27 @@ export class CreatureRenderer {
       }
     }
 
+    // Halation pass. A real darkfield photograph is not hard-edged: bright
+    // structures bleed a soft halo into the field around them, and the gaps
+    // between limbs are filled with out-of-focus scatter rather than pure
+    // black. Measuring the reference put its limb region at 72 % lit against
+    // 48 % here, and nearly all of that difference was black gap. Drawn
+    // additively BEFORE the opaque limbs, so the solid tissue covers it where
+    // they overlap and it survives only around the edges -- which is what
+    // halation is.
+    p.blendMode(p.ADD);
+    p.noFill();
+    for (const g of geo) {
+      p.strokeWeight(g.len * 0.30);
+      p.stroke(tint[0], tint[1], tint[2], lerp(26, 44, g.spread));
+      openPoly(p, g.spine);
+      p.strokeWeight(g.len * 0.16);
+      p.stroke(tint[0], tint[1], tint[2], lerp(20, 34, g.spread));
+      openPoly(p, [g.spine[g.spine.length - 1],
+                   new Vec2(g.tip.x + g.tipDir.x * g.len * 0.42,
+                            g.tip.y + g.tipDir.y * g.len * 0.42)]);
+    }
+
     // Anterior first, so each limb is overlapped by the one behind it, as in
     // the photograph. Opaque compositing throughout — see the note above.
     p.blendMode(p.BLEND);
@@ -247,37 +268,45 @@ export class CreatureRenderer {
 
     // Membrane — solid pale tissue.
     p.noStroke();
-    p.fill(tint[0] * 0.62, tint[1] * 0.68, tint[2] * 0.76, lerp(190, 228, sp));
+    p.fill(tint[0] * 0.86, tint[1] * 0.90, tint[2] * 0.94, lerp(196, 226, sp));
     closedPoly(p, g.left.concat(g.right.slice().reverse()));
 
-    // Gill sac — the one dark structure on the limb.
-    p.fill(9, 13, 21, lerp(215, 245, sp));
-    closedPoly(p, g.sac);
+    // Gill sac.
+    //
+    // NOT a dark oval with bright specks — that was backwards, and measuring
+    // the reference is what caught it. Sampling a sac there gives a mean
+    // luminance of 154 with a 10th percentile of 74: it is BRIGHT tissue
+    // densely packed with DARK granules, and its apparent darkness is the
+    // average of fine structure rather than an area of flat ink. So the
+    // membrane keeps its brightness, takes only a light wash, and the
+    // granulation is drawn as many small dark dots over it.
+    p.fill(16, 21, 30, lerp(30, 46, sp));
+    closedCurve(p, g.sac);
 
-    // Granules: fine bright scatterers on the dark ground.
-    p.fill(tint[0], tint[1], tint[2], lerp(120, 175, sp));
-    // Every other station, five granules each. Denser than this looks no
-    // different at any realistic zoom and costs ~1500 circles a frame.
-    for (let ci = 0; ci < g.sacCentres.length; ci += 2) {
+    p.fill(11, 15, 23, lerp(150, 190, sp));
+    const spk = this._speckle, nspk = spk.length;
+    for (let ci = 0; ci < g.sacCentres.length; ci++) {
       const q = g.sacCentres[ci];
-      for (let k = 0; k < 5; k++) {
-        const s = this._speckle[(k * 5 + ci * 3 + g.index * 7) % this._speckle.length];
-        p.circle(q.mid.x + (s.x * 0.85) * q.w * q.px + (s.y * 0.9) * q.w * -q.py,
-                 q.mid.y + (s.x * 0.85) * q.w * q.py + (s.y * 0.9) * q.w * q.px,
-                 0.9 + (k % 2) * 0.4);
+      for (let k = 0; k < 6; k++) {
+        // Stride by a number coprime with the table length so successive
+        // granules land far apart on the spiral instead of clustering.
+        const s = spk[(ci * 17 + k * 7 + g.index * 5) % nspk];
+        p.circle(q.mid.x + (s.x * 0.92) * q.w * q.px + (s.y * 0.96) * q.w * -q.py,
+                 q.mid.y + (s.x * 0.92) * q.w * q.py + (s.y * 0.96) * q.w * q.px,
+                 1.0 + (k % 3) * 0.4);
       }
     }
 
     // Bright margins and the rib along the limb axis.
     p.noFill();
     p.strokeWeight(0.6);
-    p.stroke(tint[0], tint[1], tint[2], lerp(70, 110, sp));
+    p.stroke(tint[0], tint[1], tint[2], lerp(80, 120, sp));
     openPoly(p, g.left);
     openPoly(p, g.right);
     // One prominent rib per limb, as in the photograph — not a bright outline
     // on every edge, which turns the row into a lattice of intersecting lines.
-    p.strokeWeight(1.0);
-    p.stroke(tint[0], tint[1], tint[2], lerp(135, 180, sp));
+    p.strokeWeight(0.8);
+    p.stroke(tint[0], tint[1], tint[2], lerp(95, 135, sp));
     openPoly(p, g.spine.slice(2));
   }
 
@@ -288,30 +317,38 @@ export class CreatureRenderer {
    * are near-parallel, close-packed and only gently splayed.
    */
   _setalTuft(p, g, tint) {
-    const nSet = 9;
-    const L = g.len * lerp(0.30, 0.54, g.spread);
-    const fanMax = lerp(0.05, 0.17, g.spread);
+    const nSet = 22;
+    const L = g.len * lerp(0.34, 0.60, g.spread);
+    const fanMax = lerp(0.06, 0.19, g.spread);
     const margin = g.side > 0 ? g.left : g.right;
     const last = margin.length - 1;
     p.noFill();
-    p.strokeWeight(0.5);
-    p.stroke(tint[0] * 0.50, tint[1] * 0.56, tint[2] * 0.66, lerp(70, 120, g.spread));
+    // Dense enough to merge into tissue. In the reference the setal tufts are
+    // not a comb of separate hairs — they close up into a continuous feathered
+    // mass that fills the space between neighbouring limbs, and that mass is
+    // most of why the thorax reads as packed rather than gappy.
+    p.strokeWeight(0.6);
+    p.stroke(tint[0] * 0.84, tint[1] * 0.88, tint[2] * 0.92, lerp(120, 175, g.spread));
     const baseA = Math.atan2(g.tipDir.y, g.tipDir.x);
     for (let s = 0; s < nSet; s++) {
       const f = s / (nSet - 1);
-      const kf = (0.66 + 0.34 * f) * last;
+      const kf = (0.64 + 0.36 * f) * last;
       const k0 = Math.min(last - 1, Math.floor(kf));
       const fr = kf - k0;
       let px = lerp(margin[k0].x, margin[k0 + 1].x, fr);
       let py = lerp(margin[k0].y, margin[k0 + 1].y, fr);
-      const a0 = baseA + (f - 0.5) * 2 * fanMax;
+      // Irregular length and angle per seta. A perfectly even fan reads as a
+      // drawn graphic; real setae vary.
+      const jitter = this._speckle[(s * 5 + g.index * 7) % this._speckle.length];
+      const a0 = baseA + (f - 0.5) * 2 * fanMax + jitter.y * 0.05;
+      const Lk = L * (0.78 + 0.34 * (jitter.x * 0.5 + 0.5));
       p.beginShape();
       p.vertex(px, py);
       const SEG = 2;
       for (let k = 1; k <= SEG; k++) {
         const a = a0 - (k / SEG) * 0.34 * g.side;
-        px += Math.cos(a) * (L / SEG);
-        py += Math.sin(a) * (L / SEG);
+        px += Math.cos(a) * (Lk / SEG);
+        py += Math.sin(a) * (Lk / SEG);
         p.vertex(px, py);
       }
       p.endShape();
@@ -343,11 +380,15 @@ export class CreatureRenderer {
     }
 
     // Paddle outline — a long tapering blade, not a pointed leaf.
-    const wMax = len * 0.26 * lerp(0.66, 1, spread);
+    const wMax = len * 0.30 * lerp(0.70, 1, spread);
     const left = [], right = [];
     for (let k = 0; k <= STEPS; k++) {
       const u = k / STEPS;
-      const w = wMax * Math.sin(Math.PI * Math.pow(u, 0.42)) ** 0.75;
+      // Broad almost to the tip, then a quick taper. The earlier profile fell
+      // to 38 % of full width by u = 0.8, which left the distal half of every
+      // limb thin and dim; in the reference the blade stays full-bodied and
+      // narrows only right at the end.
+      const w = wMax * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.62)), 0.42);
       const a = spine[Math.max(0, k - 1)], b = spine[Math.min(STEPS, k + 1)];
       let dx = b.x - a.x, dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 1;
@@ -356,20 +397,33 @@ export class CreatureRenderer {
       right.push(new Vec2(spine[k].x - px * w, spine[k].y - py * w));
     }
 
-    // Gill sac: an oval over the middle third, biased to one margin.
+    // Gill sac.
+    //
+    // Sampled parametrically along the limb rather than at the blade's own
+    // vertices. Reusing those meant only the three that happened to fall inside
+    // the sac range qualified, so the "oval" was a hexagon and the granules
+    // piled into three merged blobs — the sac rendered as a hard black slab
+    // where the reference shows a soft, mid-toned, finely granular patch.
     const sac = [];
-    const a0 = 0.20, a1 = 0.78;
-    for (let k = 0; k <= STEPS; k++) {
-      const u = k / STEPS;
-      if (u < a0 || u > a1) continue;
-      const v = (u - a0) / (a1 - a0);
-      const w = wMax * 0.66 * Math.sin(Math.PI * v) ** 0.5;
-      const mid = Vec2.lerp(spine[k], side > 0 ? left[k] : right[k], 0.22);
-      const a = spine[Math.max(0, k - 1)], b = spine[Math.min(STEPS, k + 1)];
-      const dx = b.x - a.x, dy = b.y - a.y;
+    const a0 = 0.28, a1 = 0.82, SAC_N = 12;
+    const marg = side > 0 ? left : right;
+    for (let j = 0; j <= SAC_N; j++) {
+      const u = a0 + (a1 - a0) * (j / SAC_N);
+      const kf = u * STEPS;
+      const k0 = Math.min(STEPS - 1, Math.floor(kf));
+      const fr = kf - k0;
+      const cx = lerp(spine[k0].x, spine[k0 + 1].x, fr);
+      const cy = lerp(spine[k0].y, spine[k0 + 1].y, fr);
+      const mx = lerp(marg[k0].x, marg[k0 + 1].x, fr);
+      const my = lerp(marg[k0].y, marg[k0 + 1].y, fr);
+
+      const v = j / SAC_N;
+      const w = wMax * 0.60 * Math.sin(Math.PI * v) ** 0.55;
+      const mid = new Vec2(cx + (mx - cx) * 0.24, cy + (my - cy) * 0.24);
+
+      let dx = spine[k0 + 1].x - spine[k0].x, dy = spine[k0 + 1].y - spine[k0].y;
       const d = Math.hypot(dx, dy) || 1;
-      const px = -dy / d, py = dx / d;
-      sac.push({ mid, px, py, w });
+      sac.push({ mid, px: -dy / d, py: dx / d, w });
     }
     const sacRing = sac.map((q) => new Vec2(q.mid.x + q.px * q.w, q.mid.y + q.py * q.w))
       .concat(sac.slice().reverse().map((q) => new Vec2(q.mid.x - q.px * q.w, q.mid.y - q.py * q.w)));
