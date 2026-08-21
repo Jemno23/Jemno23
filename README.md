@@ -39,6 +39,18 @@ python3 -m http.server 8000     # or: npx serve
 then open <http://localhost:8000>. p5.js is vendored in `vendor/`, so there is
 nothing to install and it works offline.
 
+To get a single shareable file instead — everything inlined, no server, no
+network:
+
+```bash
+node tools/build-standalone.mjs        # -> dist/sea-monkey.html
+```
+
+That is a small real bundler rather than a concatenation, because
+`core/noise.js` has a private `lerp` and `core/mathx.js` exports a different
+one. It also escapes the output to pure ASCII, so the page does not depend on
+the host document declaring a charset.
+
 ## Interact
 
 The pointer is a **light source**, not a handle. You can influence the creature;

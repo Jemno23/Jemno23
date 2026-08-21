@@ -1,0 +1,269 @@
+<title>Computational Sea-Monkey</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Serif:ital@0;1&display=swap">
+
+<style>
+  /*
+    Deliberately single-theme. This is a darkfield microscope field: the whole
+    point of the illumination is that the ground is black and you only see what
+    the specimen scatters. A light variant would not be a different skin, it
+    would be a different instrument. Every colour is painted explicitly so the
+    page holds on either host ground.
+
+    Palette is taken from the animal itself: the pale blue is the scattered
+    light off its tissue, the ochre is its gut, which is the one warm note
+    anywhere on it.
+  */
+  :root {
+    --field:      #04060b;
+    --tissue:     #bad6ec;
+    --gut:        #c4ac6e;
+    --ink:        #dfe8f2;
+    --ink-dim:    rgba(223, 232, 242, 0.50);
+    --ink-faint:  rgba(223, 232, 242, 0.30);
+    --rule:       rgba(186, 214, 236, 0.15);
+    --rule-lit:   rgba(186, 214, 236, 0.34);
+    --panel:      rgba(6, 10, 18, 0.62);
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--field);
+    color: var(--ink);
+    font-family: var(--mono);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  canvas {
+    position: fixed;
+    inset: 0;
+    display: block;
+    z-index: 0;
+    touch-action: none;
+  }
+
+  .chrome {
+    position: fixed;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .chrome > * { pointer-events: auto; }
+
+  /* ---- Slide label, top left ------------------------------------------ */
+
+  .slide {
+    top: clamp(14px, 3vh, 30px);
+    left: clamp(14px, 3vw, 32px);
+    max-width: min(46ch, calc(100vw - 28px));
+  }
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.19em;
+    text-transform: uppercase;
+    color: var(--gut);
+    margin: 0 0 10px;
+  }
+  .specimen {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: clamp(19px, 3.4vw, 27px);
+    line-height: 1.15;
+    margin: 0;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .blurb {
+    font-size: 11.5px;
+    line-height: 1.65;
+    color: var(--ink-dim);
+    margin: 10px 0 0;
+    max-width: 40ch;
+  }
+  .blurb b { color: var(--ink); font-weight: 500; }
+
+  /* ---- Live readout ---------------------------------------------------- */
+
+  .readout {
+    top: clamp(14px, 3vh, 30px);
+    right: clamp(14px, 3vw, 32px);
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 5px 14px;
+    align-items: baseline;
+    padding: 12px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--panel);
+    backdrop-filter: blur(3px);
+  }
+  .readout dt {
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .readout dd {
+    margin: 0;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--tissue);
+  }
+  .readout dd span { color: var(--ink-faint); font-size: 9.5px; margin-left: 2px; }
+
+  /* ---- Control rail, bottom ------------------------------------------- */
+
+  .rail {
+    left: 50%;
+    bottom: clamp(14px, 3vh, 28px);
+    transform: translateX(-50%);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--panel);
+    backdrop-filter: blur(3px);
+    max-width: calc(100vw - 28px);
+  }
+
+  button {
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    color: var(--ink-dim);
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 7px 13px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 120ms linear, border-color 120ms linear;
+  }
+  button:hover { color: var(--ink); border-color: var(--rule-lit); }
+  button:focus-visible { outline: 2px solid var(--gut); outline-offset: 2px; }
+  button[aria-pressed="true"] {
+    color: var(--field);
+    background: var(--gut);
+    border-color: var(--gut);
+  }
+
+  .hint {
+    font-size: 10.5px;
+    color: var(--ink-faint);
+    padding-left: 4px;
+    border-left: 1px solid var(--rule);
+    margin-left: 2px;
+  }
+
+  /* Narrow screens: the label would fight the readout, so drop the prose. */
+  @media (max-width: 640px) {
+    .blurb { display: none; }
+    .readout { gap: 3px 10px; padding: 9px 11px; }
+    .hint { display: none; }
+  }
+  @media (max-height: 520px) {
+    .blurb { display: none; }
+  }
+
+  /*
+    With the mathematics showing, the sketch draws its own STATE panel and key
+    legend. Ours would sit on top of them saying the same things, so the page
+    chrome yields and leaves the field to the overlay.
+  */
+  body.debugging .readout,
+  body.debugging .hint,
+  body.debugging .blurb { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+
+<div class="chrome slide">
+  <p class="eyebrow">Darkfield &middot; live simulation</p>
+  <h1 class="specimen">Artemia salina</h1>
+  <p class="blurb">
+    Nothing here is animated. The body is a constrained particle chain, the
+    eleven pairs of legs are phase-shifted paddles, and the creature turns by
+    bending &mdash; the bend has to physically work.
+    <b>Move your pointer: it is a light, not a handle.</b>
+  </p>
+</div>
+
+<dl class="chrome readout" id="readout">
+  <dt>Beat</dt>    <dd><span id="r-hz">&mdash;</span> <span>Hz</span></dd>
+  <dt>Arousal</dt> <dd id="r-arousal">&mdash;</dd>
+  <dt>Speed</dt>   <dd><span id="r-speed">&mdash;</span> <span>px/s</span></dd>
+</dl>
+
+<div class="chrome rail">
+  <button id="btn-math" aria-pressed="false">Show the mathematics</button>
+  <button id="btn-startle">Startle</button>
+  <button id="btn-reset">Reset</button>
+  <span class="hint">or press D &middot; 1&ndash;5 &middot; W L B T &middot; space</span>
+</div>
+
+<script>/*__P5__*/</script>
+<script>/*__BUNDLE__*/</script>
+
+<script>
+  // The sketch exposes its app object on window; wait for it, then wire the
+  // rail. Buttons exist because this page is usually viewed in an iframe, where
+  // keyboard focus is unreliable and a phone has no keyboard at all, so the
+  // simulation should be operable without either.
+  (function () {
+    var el = function (id) { return document.getElementById(id); };
+    var math = el('btn-math');
+
+    function ready(app) {
+      // This page draws its own label and readout, so switch off the one the
+      // sketch paints onto the canvas, or they overlap and disagree.
+      app.showHud = false;
+      math.addEventListener('click', function () {
+        app.showDebug = !app.showDebug;
+        document.body.classList.toggle('debugging', app.showDebug);
+        math.setAttribute('aria-pressed', String(app.showDebug));
+        math.textContent = app.showDebug ? 'Hide the mathematics' : 'Show the mathematics';
+      });
+      el('btn-startle').addEventListener('click', function () { app.monkey.startle(1); });
+      el('btn-reset').addEventListener('click', function () { app.reset(); });
+
+      var hz = el('r-hz'), ar = el('r-arousal'), sp = el('r-speed'), n = 0;
+      var wasDebug = app.showDebug;
+      (function tick() {
+        // D on the keyboard bypasses the button, so mirror the state either way.
+        if (app.showDebug !== wasDebug) {
+          wasDebug = app.showDebug;
+          document.body.classList.toggle('debugging', wasDebug);
+          math.setAttribute('aria-pressed', String(wasDebug));
+          math.textContent = wasDebug ? 'Hide the mathematics' : 'Show the mathematics';
+        }
+        // Sampled every sixth frame. The numbers are real, but a 60 Hz text
+        // update is unreadable and reflows for nothing.
+        if ((n++ % 6) === 0) {
+          var r = app.monkey.readout();
+          hz.textContent = r.beatHz.toFixed(1);
+          ar.textContent = r.arousal.toFixed(2);
+          sp.textContent = Math.round(r.speed);
+        }
+        requestAnimationFrame(tick);
+      })();
+    }
+
+    (function wait() {
+      if (window.seaMonkeyApp && window.seaMonkeyApp.monkey) ready(window.seaMonkeyApp);
+      else setTimeout(wait, 60);
+    })();
+  })();
+</script>
